@@ -9,7 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle2, ChevronLeft, Loader2, AlertCircle, ShieldCheck } from "lucide-react";
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle 
+} from "@/components/ui/dialog";
+import { CheckCircle2, ChevronLeft, Loader2, AlertCircle, ShieldCheck, Copy, Check } from "lucide-react";
 
 export default function ElectionDetailPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -24,8 +32,10 @@ export default function ElectionDetailPage() {
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   
-  // CHANGED: We now track the full result object, not just a boolean
+  // State for success modal and hash
   const [voteResult, setVoteResult] = useState<{success: boolean, message: string} | null>(null);
+  const [extractedHash, setExtractedHash] = useState<string>("");
+  const [copied, setCopied] = useState(false);
 
   // Auth Check
   useEffect(() => {
@@ -45,16 +55,32 @@ export default function ElectionDetailPage() {
   }, [user, electionId]);
 
   const handleVote = async () => {
-    // We must check if user exists here for TypeScript
     if (!selectedCandidate || !election || !user) return;
     
     setSubmitting(true);
     
-    // FIX: Pass user.id as the 3rd argument!
     const result = await api.castVote(election.id, selectedCandidate, user.id);
     
     setSubmitting(false);
     setVoteResult(result);
+
+    // Extract just the hash code from the message "Vote Hash: abc123..."
+    if (result.success && result.message.includes("Vote Hash:")) {
+      const hash = result.message.split("Vote Hash:")[1].trim();
+      setExtractedHash(hash);
+    }
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(extractedHash);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  // Helper to shorten the hash visually (e.g. ad928...71a6fe)
+  const truncateHash = (hash: string) => {
+    if (hash.length <= 16) return hash;
+    return `${hash.substring(0, 8)}...${hash.substring(hash.length - 8)}`;
   };
 
   // 1. Loading State
@@ -84,32 +110,7 @@ export default function ElectionDetailPage() {
     );
   }
 
-  // 3. Success State
-  if (voteResult?.success) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        <Navbar />
-        <div className="container mx-auto p-4 flex items-center justify-center min-h-[80vh]">
-          <Card className="w-full max-w-md text-center p-6 border-green-200 bg-green-50 shadow-lg">
-            <CardContent className="pt-6 space-y-4">
-              <div className="mx-auto bg-green-100 w-20 h-20 rounded-full flex items-center justify-center mb-4 shadow-sm">
-                <CheckCircle2 className="h-10 w-10 text-green-600" />
-              </div>
-              <h2 className="text-2xl font-bold text-green-900">Vote Confirmed!</h2>
-              <p className="text-green-800/80 text-sm">{voteResult.message}</p>
-              <div className="pt-4">
-                <Button onClick={() => router.push("/")} className="w-full bg-green-600 hover:bg-green-700">
-                  Back to Dashboard
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
-
-  // 4. Main Voting Form
+  // 3. Main Voting Form (With Modal)
   return (
     <div className="min-h-screen bg-slate-50 pb-20">
       <Navbar />
@@ -119,7 +120,7 @@ export default function ElectionDetailPage() {
           <ChevronLeft className="mr-2 h-4 w-4" /> Back to List
         </Button>
 
-        {/* Error Message Display */}
+        {/* Error Message Display (Inline) */}
         {voteResult && !voteResult.success && (
            <div className="mb-4 p-4 bg-red-100 border border-red-200 text-red-700 rounded-lg flex items-center gap-2 animate-in fade-in slide-in-from-top-2">
              <AlertCircle className="h-5 w-5" />
@@ -193,6 +194,40 @@ export default function ElectionDetailPage() {
           </CardFooter>
         </Card>
       </main>
+
+      {/* --- SUCCESS MODAL --- */}
+      <Dialog open={!!(voteResult?.success)} onOpenChange={() => router.push('/')}>
+        <DialogContent className="sm:max-w-md text-center">
+          <DialogHeader className="flex flex-col items-center gap-2">
+            <div className="h-16 w-16 bg-green-100 rounded-full flex items-center justify-center mb-2">
+                <CheckCircle2 className="h-10 w-10 text-green-600" />
+            </div>
+            <DialogTitle className="text-2xl text-green-900">Vote Confirmed!</DialogTitle>
+            <DialogDescription>
+              Your vote has been securely recorded on the blockchain.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex items-center space-x-2 p-4 bg-slate-100 rounded-lg mt-2 border border-slate-200">
+            <div className="grid flex-1 gap-1 text-left">
+              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Vote Receipt Hash</p>
+              <code className="text-sm font-mono text-slate-900 break-all">
+                {extractedHash ? truncateHash(extractedHash) : "Processing..."}
+              </code>
+            </div>
+            <Button type="button" size="icon" variant="ghost" onClick={copyToClipboard} className="h-8 w-8">
+              {copied ? <Check className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-slate-500" />}
+            </Button>
+          </div>
+
+          <DialogFooter className="sm:justify-center mt-4">
+            <Button type="button" className="w-full sm:w-auto min-w-[150px] bg-green-600 hover:bg-green-700" onClick={() => router.push('/')}>
+              Back to Dashboard
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
