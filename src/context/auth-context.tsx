@@ -19,7 +19,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Check LocalStorage on load to persist session mock
   useEffect(() => {
     const stored = localStorage.getItem("mock_user");
     if (stored) setUser(JSON.parse(stored));
@@ -31,24 +30,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (foundUser) {
       setUser(foundUser);
       localStorage.setItem("mock_user", JSON.stringify(foundUser));
-      router.push("/");
+      // Refresh to ensure state updates everywhere
+      router.refresh(); 
       return true;
     }
     return false;
   };
 
   const register = async (u: string, p: string) => {
-    const newUser = await api.register(u, p);
-    setUser(newUser);
-    localStorage.setItem("mock_user", JSON.stringify(newUser));
-    router.push("/");
+    await api.register(u, p);
+    // Auto-login logic could go here
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem("mock_user");
-    localStorage.removeItem("access_token"); // <--- Add this line
-    router.push("/auth/login");
+    localStorage.removeItem("access_token");
+    
+    // FIX: Redirect to Home instead of /auth/login
+    router.push("/"); 
+    router.refresh();
   };
 
   return (

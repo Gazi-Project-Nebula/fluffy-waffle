@@ -1,39 +1,64 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   Dialog, 
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogDescription, 
+  DialogDescription,
   DialogFooter 
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { api, Election } from "@/lib/mock-db";
+import { api, Election, ElectionResult } from "@/lib/mock-db";
 import { useAuth } from "@/context/auth-context";
-import { CheckCircle2, Loader2, Copy, Check, ShieldCheck, AlertCircle } from "lucide-react";
+import { CheckCircle2, Loader2, Copy, Check, ShieldCheck, AlertCircle, RefreshCw } from "lucide-react";
 
 interface ElectionModalProps {
   election: Election | null;
   isOpen: boolean;
   onClose: () => void;
+  initialMode?: "vote" | "results";
 }
 
-export function ElectionModal({ election, isOpen, onClose }: ElectionModalProps) {
+export function ElectionModal({ election, isOpen, onClose, initialMode = "vote" }: ElectionModalProps) {
   const { user } = useAuth();
+  
+  // States
   const [selectedCandidate, setSelectedCandidate] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ success: boolean; message: string; hash?: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  
+  // Results Mode State
+  const [mode, setMode] = useState<"vote" | "results">(initialMode);
+  const [resultsData, setResultsData] = useState<ElectionResult | null>(null);
+  const [loadingResults, setLoadingResults] = useState(false);
 
-  if (!isOpen && (selectedCandidate || result)) {
-    setTimeout(() => {
+  // Initialize/Reset on Open
+  useEffect(() => {
+    if (isOpen && election) {
+      // Force "results" mode if election is closed
+      const targetMode = !election.is_active ? "results" : initialMode;
+      setMode(targetMode);
+      
       setSelectedCandidate(null);
       setResult(null);
-    }, 300);
-  }
+      setResultsData(null);
+
+      if (targetMode === "results") {
+        loadResults(election.id);
+      }
+    }
+  }, [isOpen, election, initialMode]);
+
+  const loadResults = async (id: number) => {
+    setLoadingResults(true);
+    const data = await api.fetchResults(id);
+    setResultsData(data);
+    setLoadingResults(false);
+  };
 
   const handleVote = async () => {
     if (!selectedCandidate || !election || !user) return;
@@ -44,6 +69,8 @@ export function ElectionModal({ election, isOpen, onClose }: ElectionModalProps)
       let hash = "";
       if (res.success && res.message.includes("Vote Hash:")) {
         hash = res.message.split("Vote Hash:")[1].trim();
+      } else if (res.vote_hash) {
+        hash = res.vote_hash;
       }
       setResult({ ...res, hash });
     } catch (error) {
@@ -61,25 +88,35 @@ export function ElectionModal({ election, isOpen, onClose }: ElectionModalProps)
     }
   };
 
-  // Helper to make the hash look nice (e.g. 0x1234...abcd)
   const formatHash = (hash: string) => {
     if (!hash) return "";
     if (hash.length < 20) return hash;
     return `${hash.substring(0, 12)}...${hash.substring(hash.length - 12)}`;
   };
 
+  const getTotalVotes = () => resultsData?.results.reduce((acc, curr) => acc + curr.vote_count, 0) || 0;
+  
+  const getPercentage = (count: number) => {
+    const total = getTotalVotes();
+    if (total === 0) return 0;
+    return Math.round((count / total) * 100);
+  };
+
   if (!election) return null;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      {/* Hide default close 'X' when showing success/failure for visual balance */}
       <DialogContent className={`
         sm:max-w-md bg-white dark:bg-[#0f172a] border-slate-200 dark:border-slate-800 
         p-0 overflow-hidden gap-0 shadow-2xl transition-all
         ${result ? "[&>button]:hidden" : ""} 
       `}>
         
-        {/* --- VIEW 1: VOTING FORM --- */}
-        {!result ? (
+        {/* =======================
+            VIEW 1: VOTING FORM
+           ======================= */}
+        {!result && mode === "vote" && (
           <>
             <div className="relative p-6 pb-4 border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500" />
@@ -94,9 +131,7 @@ export function ElectionModal({ election, isOpen, onClose }: ElectionModalProps)
                       <span>Blockchain ID: {election.id}</span>
                     </div>
                   </div>
-                  <Badge variant={election.is_active ? "default" : "secondary"} className="shrink-0">
-                    {election.is_active ? "Active" : "Closed"}
-                  </Badge>
+                  <Badge variant="default" className="shrink-0">Active</Badge>
                 </div>
                 <DialogDescription className="mt-2 text-slate-600 dark:text-slate-400 line-clamp-2 text-left">
                   {election.description}
@@ -110,12 +145,10 @@ export function ElectionModal({ election, isOpen, onClose }: ElectionModalProps)
                 return (
                   <div
                     key={candidate.id}
-                    onClick={() => election.is_active && setSelectedCandidate(candidate.id)}
+                    onClick={() => setSelectedCandidate(candidate.id)}
                     className={`
                       relative flex items-center p-4 rounded-xl border-2 cursor-pointer transition-all duration-200
-                      ${!election.is_active 
-                        ? 'opacity-60 grayscale cursor-not-allowed bg-slate-50 dark:bg-slate-900 border-slate-100 dark:border-slate-800' 
-                        : 'hover:bg-slate-50 dark:hover:bg-slate-800/50'}
+                      hover:bg-slate-50 dark:hover:bg-slate-800/50
                       ${isSelected 
                         ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-900/20 dark:border-indigo-500' 
                         : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950'}
@@ -147,21 +180,88 @@ export function ElectionModal({ election, isOpen, onClose }: ElectionModalProps)
                 <Button variant="ghost" className="flex-1" onClick={onClose}>Cancel</Button>
                 <Button 
                   className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white" 
-                  disabled={!selectedCandidate || submitting || !election.is_active}
+                  disabled={!selectedCandidate || submitting}
                   onClick={handleVote}
                 >
                   {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {election.is_active ? "Confirm Vote" : "Voting Closed"}
+                  Confirm Vote
                 </Button>
               </div>
             </DialogFooter>
           </>
-        ) : (
-          /* --- VIEW 2: SUCCESS STATE (PERFECTLY CENTERED) --- */
+        )}
+
+        {/* =======================
+            VIEW 2: RESULTS VIEW 
+           ======================= */}
+        {!result && mode === "results" && (
+          <>
+             <div className="relative p-6 pb-4 border-b border-slate-100 dark:border-slate-800/50 bg-slate-50/50 dark:bg-slate-900/50">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+              <div className="flex justify-between items-center">
+                <DialogTitle className="text-xl font-bold text-slate-900 dark:text-white">
+                  Live Results
+                </DialogTitle>
+                <Button variant="ghost" size="icon" onClick={() => loadResults(election.id)} disabled={loadingResults}>
+                  <RefreshCw className={`h-4 w-4 ${loadingResults ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+              <p className="text-sm text-slate-500 mt-1">Real-time data from the blockchain ledger.</p>
+            </div>
+
+            <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+              {loadingResults ? (
+                <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                  <Loader2 className="h-8 w-8 text-indigo-600 animate-spin" />
+                  <p className="text-sm text-slate-500">Decrypting tally...</p>
+                </div>
+              ) : resultsData ? (
+                <div className="space-y-6">
+                  {resultsData.results.map((r, idx) => (
+                    <div key={r.id}>
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="font-semibold text-slate-900 dark:text-slate-200">
+                          {idx + 1}. {r.name}
+                        </span>
+                        <span className="font-mono text-slate-500">
+                          {r.vote_count} votes ({getPercentage(r.vote_count)}%)
+                        </span>
+                      </div>
+                      <div className="h-3 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-indigo-500 rounded-full transition-all duration-1000 ease-out"
+                          style={{ width: `${getPercentage(r.vote_count)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  
+                  <div className="pt-4 border-t border-slate-100 dark:border-slate-800 text-center">
+                    <p className="text-xs text-slate-400 font-mono">
+                      Total Cast Votes: {getTotalVotes()}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-10 text-slate-500">No results available yet.</div>
+              )}
+            </div>
+
+            <DialogFooter className="p-6 pt-2 bg-slate-50/50 dark:bg-slate-900/20">
+              <Button className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900" onClick={onClose}>
+                Close Results
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {/* =======================
+            VIEW 3: SUCCESS/FAIL
+           ======================= */}
+        {result && (
           <div className="flex flex-col items-center justify-center p-8 pt-10 min-h-[400px] text-center animate-in fade-in zoom-in-95 duration-300 w-full">
             {result.success ? (
               <>
-                {/* Glow & Icon */}
                 <div className="relative mb-6 mt-2 mx-auto">
                   <div className="absolute inset-0 bg-green-500/20 blur-2xl rounded-full"></div>
                   <div className="relative h-20 w-20 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto">
@@ -185,7 +285,6 @@ export function ElectionModal({ election, isOpen, onClose }: ElectionModalProps)
                       </p>
                     </div>
                     
-                    {/* Hash Box - Centered & Truncated */}
                     <div 
                       className="relative w-full cursor-pointer group flex justify-center"
                       onClick={copyToClipboard}
@@ -194,7 +293,6 @@ export function ElectionModal({ election, isOpen, onClose }: ElectionModalProps)
                         {formatHash(result.hash)}
                       </code>
                       
-                      {/* Optional: Tiny Icon next to it */}
                       <div className="ml-2 inline-flex items-center text-slate-400">
                          {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
                       </div>
@@ -202,9 +300,14 @@ export function ElectionModal({ election, isOpen, onClose }: ElectionModalProps)
                   </div>
                 )}
 
-                <Button className="w-full h-11 text-base font-medium bg-slate-900 dark:bg-indigo-600 text-white hover:bg-slate-800 dark:hover:bg-indigo-500 transition-all shadow-lg hover:shadow-indigo-500/20" onClick={onClose}>
-                  Return to Dashboard
-                </Button>
+                <div className="flex w-full gap-3">
+                  <Button className="flex-1 bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90" onClick={onClose}>
+                    Close
+                  </Button>
+                  <Button variant="outline" className="flex-1" onClick={() => { setResult(null); setMode("results"); loadResults(election.id); }}>
+                    View Results
+                  </Button>
+                </div>
               </>
             ) : (
               <>
