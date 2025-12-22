@@ -1,57 +1,8 @@
-<<<<<<< HEAD
 # SecureVote (Frontend) 🗳️
 
 The modern, responsive user interface for the SecureVote blockchain voting platform. Built with **Next.js 15**, **TypeScript**, and **Shadcn UI**.
 
 > **Note:** This repository contains the **Frontend** code only. It requires a compatible FastAPI backend running locally to function completely.
-=======
-# SecureVote 🗳️
-
-A modern, blockchain-backed electronic voting platform built with **Next.js** and **FastAPI**. Designed for transparency, security, and a premium user experience.
-
-<br />
-
-### 🎥 Project Preview
-https://github.com/user-attachments/assets/49d3df52-5eb7-44a3-ba86-a3c9079cdf52
-
-<br />
-
-## ✨ Key Features
-
-- **🛡️ Blockchain Security:** Every vote generates a unique transaction hash, simulating an immutable ledger.
-- **🎨 Modern UI/UX:** Built with a "Linear-style" aesthetic using **Shadcn UI**.
-- **fw Dark/Light Mode:** Fully responsive theme toggle with smooth animations.
-- **⚡ Instant Interactions:** Voting and authentication happen in sleek modals—no page reloads.
-- **📊 Real-time Results:** View election outcomes with dynamic progress bars and percentage calculation.
-- **🔐 Role-Based Access:** 
-  - **Voters:** Can view active polls and cast secure votes.
-  - **Admins:** Can create, manage, and delete elections via a dedicated dashboard.
-
-## 🛠️ Tech Stack
-
-### Frontend
-- **Framework:** Next.js 15 (App Router)
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS
-- **Components:** Shadcn UI, Radix UI
-- **Icons:** Lucide React
-- **State:** React Context API
-
-### Backend
-- **Framework:** FastAPI (Python)
-- **Database:** SQLite
-- **ORM:** SQLAlchemy
-- **Auth:** JWT (JSON Web Tokens) with OAuth2
-
-## 🚀 Getting Started
-
-### Prerequisites
-- Node.js (v18+)
-- Python (v3.10+)
-
-### 1. Setup the Backend
-The frontend relies on the API running on port `8000`.
->>>>>>> 221855a (little changes in docs)
 
 <br />
 
